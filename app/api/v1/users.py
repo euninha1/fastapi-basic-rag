@@ -2,7 +2,7 @@
 Rotas de usuários (CRUD) da API.
 
 - Depende de `get_db()` para acesso ao MongoDB (vide app/db/mongo.py).
-- Usa Passlib `CryptContext` para hash de senha.
+- Usa bcrypt (via `app.core.security`) para hash de senha.
 - Endpoints: listar, obter por id, criar, atualizar e excluir.
 
 Variáveis de ambiente (indiretas):
@@ -12,14 +12,10 @@ Variáveis de ambiente (indiretas):
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional
 from bson import ObjectId
-from passlib.context import CryptContext
+import bcrypt
 from app.schemas.user import UserOut, UserCreate, UserUpdate
 from app.db.mongo import get_db
 
-# Password hashing context:
-# - pbkdf2_sha256 como padrão para evitar limitações/erros com bcrypt (72 bytes).
-# - Mantém bcrypt_sha256 e bcrypt para verificação retrocompatível de hashes.
-pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt_sha256", "bcrypt"], deprecated="auto")
 router = APIRouter(tags=["users"]) 
 
 
@@ -31,6 +27,14 @@ def _to_user_out(doc) -> UserOut:
         email=doc["email"],
         status=doc.get("status", "ativo"),
     )
+
+
+def hash_password(plain_password: str) -> str:
+    """Hash local de senha com bcrypt.
+    """
+    plain_bytes = plain_password.encode("utf-8")
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(plain_bytes, salt).decode("utf-8")
 
 
 @router.get("/users", response_model=List[UserOut])
@@ -74,9 +78,9 @@ async def create_user_endpoint(data: UserCreate, db=Depends(get_db)):
     if await db["users"].find_one({"email": data.email}):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
 
-    # Hash password (supports long passphrases via bcrypt_sha256)
+    # Hash da senha com bcrypt (função local)
     try:
-        password_hash = pwd_context.hash(data.password)
+        password_hash = hash_password(data.password)
     except Exception as e:
         # Normalize hashing errors to a 400 so clients get actionable feedback
         raise HTTPException(
@@ -106,7 +110,7 @@ async def update_user_endpoint(user_id: str, data: UserUpdate, db=Depends(get_db
     update_doc = {k: v for k, v in data.model_dump(exclude_unset=True).items() if k != "password"}
     if data.password:
         try:
-            update_doc["password_hash"] = pwd_context.hash(data.password)
+            update_doc["password_hash"] = hash_password(data.password)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

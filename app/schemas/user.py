@@ -20,7 +20,6 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Payload de criação; inclui senha validada por tamanho."""
 
-    # bcrypt_sha256 supports long inputs; cap for validation and payload sanity
     password: str = Field(min_length=6, max_length=256, description="Senha em texto plano para cadastro")
 
 
