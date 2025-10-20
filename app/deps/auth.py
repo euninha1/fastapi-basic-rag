@@ -1,23 +1,22 @@
 """
 Dependências de autenticação para rotas protegidas.
 
-- Define `oauth2_scheme` (Bearer) e `get_current_user_id` para extrair o `sub` do JWT.
+- Usa HTTP Bearer (somente token) e `get_current_user_id` para extrair o `sub` do JWT.
 - Alinhado com `app/core/security.py` (claim `sub` e algoritmo configurado lá).
-
-Configuração:
-- tokenUrl do OAuth2PasswordBearer: "/api/v1/auth/login".
 """
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError
 from app.core.security import decode_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+bearer_scheme = HTTPBearer(scheme_name="Token JWT")
 
-async def get_current_user_id(token: str = Depends(oauth2_scheme)) -> str:
-    """Valida o token Bearer e retorna o identificador do usuário (`sub`)."""
+
+async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> str:
+    """Valida o token Bearer (HTTP) e retorna o identificador do usuário (`sub`)."""
     try:
+        token = credentials.credentials
         payload = decode_token(token)
         sub = payload.get("sub")
         if not sub:
