@@ -16,6 +16,7 @@ from app.schemas.rag import UploadDocResponse, AskRequest, AnswerResponse
 from app.rag.store import upsert_document, search_similar_chunks, get_owned_document_oid
 from app.llm.openai_client import embed_texts, chat_completion
 from app.deps.auth import get_current_user_id
+from app.guardrails.middleware import validate_input, validate_output
 from pypdf import PdfReader
 
 router = APIRouter(tags=["rag"])
@@ -103,6 +104,9 @@ async def ask(
     4) Retorna resposta e fontes (ids dos chunks).
     """
 
+    # Guardrails — validação do input antes de qualquer processamento
+    validate_input(body.question)
+
     # Verifica s o documento pertence ao usuário
     oid = await get_owned_document_oid(db, body.doc_id, current_user_id)
     if not oid:
@@ -123,6 +127,10 @@ async def ask(
     
     # 4) chama LLM
     answer = chat_completion(system, user)
+
+    # Guardrails — validação do output antes de entregar ao usuário
+    answer = validate_output(answer)
+
     # Referencia as fontes pelos IDs dos chunks retornados
     sources = [f"chunk_id={str(r.get('_id'))}" for r in results]
     return AnswerResponse(answer=answer, sources=sources)
